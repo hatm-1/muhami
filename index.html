@@ -22,6 +22,16 @@
 
 <link rel="manifest" href="manifest.json">
 <style>:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0}img{max-width:100%}[hidden]{display:none!important}</style>
+<style>
+html{background:#0B1F1A}
+#boot{position:fixed;inset:0;z-index:9999;display:grid;place-items:center;background:radial-gradient(120% 70% at 30% 20%,#1B4A3E 0%,#0F2C25 45%,#081814 100%);transition:opacity .45s ease,visibility .45s;pointer-events:none}
+#boot.out{opacity:0;visibility:hidden}
+#boot .bx{display:flex;flex-direction:column;align-items:center;gap:22px;transform:translateY(-4%)}
+#boot img{width:128px;height:128px;border-radius:29px;box-shadow:0 18px 50px rgba(0,0,0,.45),0 0 0 1px rgba(255,255,255,.08);transition:transform .45s ease}
+#boot.out img{transform:scale(.92)}
+#boot i{width:44px;height:4px;border-radius:4px;background:rgba(114,221,180,.55)}
+@media (prefers-reduced-motion:reduce){#boot,#boot img{transition:none}}
+</style>
 <title>مهامي الأسبوعية</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&family=Tajawal:wght@400;500;700&family=Cairo:wght@400;600;700&family=Almarai:wght@400;700&display=swap">
@@ -435,6 +445,7 @@ select.inp{appearance:auto}
 
 </head>
 <body>
+<div id="boot" aria-hidden="true"><div class="bx"><img src="icon-512.png" alt=""><i></i></div></div>
 <div id="bg"></div>
 <div class="app" dir="rtl" lang="ar">
   <main class="page" id="page"></main>
@@ -1512,7 +1523,12 @@ function openSettings(){
       h("div",{class:"srow"},h("span",{class:"sl"},"إعدادات التركيز",h("small",{},"شكل الساعة، البومودورو")),h("button",{type:"button",class:"btn sm ghost",onclick:focusSheet},"فتح"))));
     const bk=h("textarea",{class:"inp",id:"s-backup",placeholder:"الصق هنا النسخة الاحتياطية عشان تسترجعها",style:"min-height:70px"});
     page.append(h("div",{class:"sec"},"بياناتك"),h("div",{class:"card",style:"padding:14px;display:flex;flex-direction:column;gap:10px"},
-      h("span",{class:"flabel"},"انسخ بياناتك عشان تنقلها لجوال ثاني أو للنسخة اللي على الاستضافة"),
+      h("div",{class:"srow",style:"padding:0;border:0"},h("span",{class:"sl"},"حماية التخزين",h("small",{},persistOK?"محمي: الجوال ما يمسح بياناتك لو امتلت المساحة":"غير مضمون، خذ نسخة احتياطية كملف كل فترة")),h("span",{class:"chip-s",style:`color:${persistOK?"var(--accent)":"var(--warm)"}`},persistOK?"محمي":"تنبيه")),
+      HOSTED?h("button",{type:"button",class:"btn wide",onclick:()=>{downloadBackup();draw()}},"حفظ نسخة احتياطية كملف"):null,
+      HOSTED?(()=>{const fi=h("input",{type:"file",accept:".json,application/json,text/plain",hidden:true,id:"s-file"});fi.onchange=()=>{const f=fi.files[0];if(!f)return;const rd=new FileReader();rd.onload=()=>{try{const d=JSON.parse(rd.result);if(!d.tpl&&!d.days)throw 0;S=normalize(d);save();draw();toast("رجعت بياناتك من الملف")}catch(e){toast("الملف هذا مو نسخة صحيحة")}};rd.readAsText(f)};
+        return h("div",{},fi,h("button",{type:"button",class:"btn ghost wide",onclick:()=>fi.click()},"استرجاع من ملف"))})():null,
+      S.lastBackup?h("span",{class:"flabel"},"آخر نسخة: "+relDay(S.lastBackup)):null,
+      h("span",{class:"flabel"},"أو انسخ بياناتك كنص عشان تنقلها لجوال ثاني أو للنسخة اللي على الاستضافة"),
       h("button",{type:"button",class:"btn ghost wide",onclick:async()=>{const txt=JSON.stringify(S);try{await navigator.clipboard.writeText(txt);toast("انسخت ✓ احفظها في الملاحظات")}catch(e){bk.value=txt;bk.select();toast("حدد النص وانسخه يدوياً")}}},"نسخ بياناتي"),
       bk,h("button",{type:"button",class:"btn ghost wide",onclick:()=>{try{const d=JSON.parse(bk.value);if(!d.tpl&&!d.days)throw 0;S=normalize(d);save();bk.value="";draw();toast("رجعت بياناتك ✓")}catch(e){toast("النص هذا مو نسخة صحيحة")}}},"استرجاع")));
     const wipe=h("button",{type:"button",class:"btn ghost wide",style:"color:var(--danger)"},"مسح كل البيانات والبدء من جديد");
@@ -1574,10 +1590,17 @@ function celebrate(){
 }
 
 /* ===== تشغيل ===== */
+const HOSTED=!window.claude;
+let persistOK=false;
+try{if(navigator.storage&&navigator.storage.persisted)navigator.storage.persisted().then(p=>{persistOK=p;if(!p&&navigator.storage.persist)navigator.storage.persist().then(g=>{persistOK=g})}).catch(()=>{})}catch(e){}
+function downloadBackup(){try{const blob=new Blob([JSON.stringify(S)],{type:"application/json"}),a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download="muhami-backup-"+todayKey()+".json";document.body.append(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove()},1500);S.lastBackup=todayKey();save();toast("انحفظت النسخة، خلها في تطبيق الملفات")}catch(e){toast("ما قدرت أحفظ الملف، استخدم «نسخ بياناتي»")}}
+function backupNudge(){if(!HOSTED)return;const last=S.lastBackup,k=todayKey(),has=Object.keys(S.log).length>2;if(!has)return;S.nudge=S.nudge||"";if(S.nudge===k)return;
+  if(!last||Math.round((fromKey(k)-fromKey(last))/864e5)>=7){S.nudge=k;save();setTimeout(()=>toast("خذ نسخة احتياطية من الإعدادات، عشان بياناتك ما تضيع"),1500)}}
 const local=lsGet();if(local)S=normalize(local);
 window.addEventListener("hashchange",()=>{const r=ROUTES[location.hash.slice(1)];if(r&&r!==tab){tab=r;render()}});
 if(F.endAt)tickOn();
 tab=ROUTES[location.hash.slice(1)]||SET().home||"today";
+setTimeout(backupNudge,800);
 render();
 let lastDay=todayKey();
 let ptrDown=false;document.addEventListener("pointerdown",()=>ptrDown=true,true);document.addEventListener("pointerup",()=>ptrDown=false,true);document.addEventListener("pointercancel",()=>ptrDown=false,true);
@@ -1594,5 +1617,6 @@ document.addEventListener("visibilitychange",()=>{if(!document.hidden){applySet(
 
 </script>
 
+<script>(function(){var b=document.getElementById("boot");if(!b)return;var go=function(){requestAnimationFrame(function(){requestAnimationFrame(function(){b.classList.add("out");setTimeout(function(){b.remove()},600)})})};var im=b.querySelector("img");if(im.complete)setTimeout(go,180);else{im.onload=function(){setTimeout(go,180)};setTimeout(go,900)}})();</script>
 </body>
 </html>
